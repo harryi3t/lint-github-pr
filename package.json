@@ -1,0 +1,36 @@
+{
+  "name": "github_io",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/script.js",
+  "scripts": {
+    "test": "npm run build && mocha dist/test",
+    "build": "babel src --out-dir dist",
+    "start": "node dist/script.js"
+  },
+  "author": "Harendra Singh <66hari@gmail.com> (https://harryi3t.github.io)",
+  "license": "ISC",
+  "dependencies": {
+    "async": "^2.1.4",
+    "chalk": "^1.1.3",
+    "parse-links": "^0.1.0",
+    "prompt": "^1.0.0",
+    "request": "^2.79.0",
+    "underscore": "^1.8.3",
+    "util": "^0.10.3"
+  },
+  "devDependencies": {
+    "babel-cli": "^6.18.0",
+    "babel-preset-es2015": "^6.18.0",
+    "chai": "^3.5.0",
+    "eslint": "^3.12.2",
+    "eslint-config-airbnb-base": "^11.0.0",
+    "eslint-plugin-import": "^2.2.0",
+    "grunt": "^1.0.1",
+    "grunt-babel": "^6.0.0",
+    "grunt-contrib-clean": "^1.0.0",
+    "grunt-contrib-watch": "^1.0.0",
+    "load-grunt-tasks": "^3.5.2",
+    "mocha": "^3.2.0"
+  }
+}
