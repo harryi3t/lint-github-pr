@@ -6,7 +6,32 @@ module.exports = {
     "callback-function"
   ],
   "globals": {
-
+    "__dirname": true,
+    "_": true,
+    "$": true,
+    "ActErr": true,
+    "AMQP": true,
+    "angular": true,
+    "ansi_up": true,
+    "app": true,
+    "async": true,
+    "global": true,
+    "jsyaml": true,
+    "config": true,
+    "d3": true,
+    "document": true,
+    "httpServer": true,
+    "io": true,
+    "logger": true,
+    "MicroService": true,
+    "module": true,
+    "moment": true,
+    "process": true,
+    "require": true,
+    "shipError": true,
+    "Set": "true",
+    "window": true,
+    "www": true
   },
   "extends": "airbnb-base/legacy",
   "rules": {
@@ -36,6 +61,6 @@ module.exports = {
     "no-mixed-operators": 0,
 
     // custom rules
-    //"callback-function/on-newline": ["error"]
+    "callback-function/on-newline": ["error"]
   }
 };

@@ -11,7 +11,7 @@ module.exports = {
   "rules": {
     "quotes": ["error","single"],
     "semi": ["error","always"],
-    "no-console": "warn",
+    "no-console": 0,
     "comma-dangle": ["error", "never"],
     "callback-function/on-newline": "error",
     "indent": ["error", 2]

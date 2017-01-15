@@ -1,8 +1,8 @@
 import async from 'async';
+import chalk from 'chalk';
 import fs from 'fs';
 import prompt from 'prompt';
-import {linter, CLIEngine} from 'eslint';
-//import parseDiff from 'parse-diff';
+import {CLIEngine} from 'eslint';
 import GithubAdapter from 'github-adapter';
 import logger from './logger';
 import icons from './icons';
@@ -14,6 +14,17 @@ const userinput = {
   issueNumber: 0,
   defaultRepo: null
 };
+const validNameRegexp = '[a-zA-Z0-9-.]+';
+
+function convertRawUrl(url) {
+  var exp = new RegExp(`https?:\/\/github.com\/(${validNameRegexp}\/${validNameRegexp})\/raw\/([a-z0-9]{40}\/.*)`);
+  var match = url.match(exp);
+  if (match && match.length === 3) {
+    var ownerAndRepo = match[1];
+    var shaAndFile = match[2];
+    return `https://raw.githubusercontent.com/${ownerAndRepo}/${shaAndFile}`;
+  }
+}
 
 init();
 
@@ -53,7 +64,6 @@ function init() {
 
 function parsePullRequestURL(bag, next) {
   const pullRequestUrl = process.argv[2];
-  const validNameRegexp = '[a-zA-Z0-9-.]+';
   const urlRegex = new RegExp(`https?://github.com/(${validNameRegexp})/` +
     `(${validNameRegexp})/pull/([0-9]+)(/|/files)?$`);
 
@@ -209,9 +219,14 @@ function getCompleteFiles(bag, next) {
 
   async.each(bag.diffFiles,
     function (file, nextFile) {
+      file.raw_url = convertRawUrl(file.raw_url);
       bag.adapter.getRawContent(file.raw_url,
         function (err, data) {
-          if (err) return nextFile(err);
+          if (err) {
+            if (err === 404)
+              return nextFile(`404: ${file.raw_url}`);
+            return nextFile(err);
+          }
 
           file.raw = data;
           return nextFile();
@@ -234,9 +249,15 @@ function lintEachFileInDiff(bag, next) {
 
   bag.diffFiles.forEach(
     function (file) {
+      logger.debug('\n', file.filename);
+
       var report = cli.executeOnText(file.raw, file.filename);
       var messages = report.results[0].messages.map(
         function (obj) {
+          console.log(' ',
+            chalk.yellow(chalk.bold(obj.ruleId) + ': ' + obj.line),
+            chalk.red(obj.message)
+          );
           return {
             body: `\`${obj.ruleId}\`: ${obj.message}`,
             commit_id: bag.commitID,
@@ -248,8 +269,6 @@ function lintEachFileInDiff(bag, next) {
       bag.lintMessages = bag.lintMessages.concat(messages);
     }
   );
-  console.log(bag.lintMessages);
-
   return next();
 }
 function postComments(bag, next) {

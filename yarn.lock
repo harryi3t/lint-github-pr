@@ -1315,8 +1315,9 @@ getpass@^0.1.1:
   dependencies:
     assert-plus "^1.0.0"
 
-"github-adapter@file:///home/harry/work/projects/npm/github-adapter":
-  version "0.0.3"
+github-adapter@^0.1.0:
+  version "0.1.0"
+  resolved "https://registry.yarnpkg.com/github-adapter/-/github-adapter-0.1.0.tgz#31be675fb79dd915e55c25ae5e29601058446221"
   dependencies:
     async "^2.1.4"
     parse-links "^0.1.0"
