@@ -37,7 +37,6 @@ function init() {
     configFilePresent: false,
     commitID: '',
     diffFiles: [],
-    lintMessages: [],
     lineNumberMap: {},
     tasks: [],
     token: null,
@@ -292,42 +291,45 @@ function lintEachFileInDiff(bag, next) {
 
   bag.diffFiles.forEach(
     function (file) {
+      file.messages = [];
+      file.skippedMessages = 0;
+      file.lintMessages = [];
       var report = cli.executeOnText(file.raw, file.filename);
 
       logger.debug(`\n${file.filename} (${report.results[0].messages.length})`);
 
-      var messages = report.results[0].messages.map(
+      report.results[0].messages.forEach(
         function (obj) {
-          var line = 0;
+          var consoleMessage = '';
 
           if (!bag.lineNumberMap[file.filename][obj.line]) {
-            console.log(' ',
-              chalk.dim.yellow(chalk.dim(obj.ruleId) + ': ' + obj.line),
-              chalk.dim.red(obj.message), chalk.bold.blue('skipped')
-            );
-            return null;
+            consoleMessage = chalk.dim.yellow(chalk.dim(obj.ruleId) +
+              ': ' + obj.line) + ' ' + chalk.dim.red(obj.message);
+
+            file.messages.push({
+              shouldSkip: true,
+              consoleMessage: consoleMessage
+            });
+
+            file.skippedMessages++;
+            return;
           }
 
-          line = bag.lineNumberMap[file.filename][obj.line];
-
-          console.log(' ',
-            chalk.yellow(chalk.bold(obj.ruleId) + ': ' + obj.line),
-            chalk.red(obj.message)
-          );
-
-          return {
+          consoleMessage = chalk.yellow(chalk.bold(obj.ruleId) +
+            ': ' + obj.line) + ' ' + chalk.red(obj.message);
+          var prComment = {
             body: `\`${obj.ruleId}\`: ${obj.message}`,
             commit_id: bag.commitID,
             path: file.filename,
-            position: line
+            position: bag.lineNumberMap[file.filename][obj.line]
           };
+
+          file.messages.push({
+            consoleMessage: consoleMessage,
+            prComment: prComment
+          });
         }
       );
-      var filteredMessages = messages.filter((m) => m);
-      logger.info(`Skipped ${messages.length - filteredMessages.length} ` +
-        `errors. Out of scope of current PR`);
-      messages = filteredMessages;
-      bag.lintMessages = bag.lintMessages.concat(messages);
     }
   );
   return next();
@@ -336,12 +338,37 @@ function postComments(bag, next) {
   const who = `${bag.who} | ${postComments.name}`;
   logger.debug(`>Inside ${who}`);
 
-  async.each(bag.lintMessages,
-    function (mesg, nextMesg) {
-      bag.adapter.postPRComment(bag.userinput.owner, bag.userinput.repo,
-        bag.userinput.issueNumber, mesg,
+  async.eachSeries(bag.diffFiles,
+    function (file, nextFile) {
+      logger.info(`\n${file.filename}: (${file.messages.length})`);
+
+      async.each(file.messages,
+        function (mesg, nextMesg) {
+          if (mesg.shouldSkip) {
+            console.log(chalk.yellow(' ► ') + mesg.consoleMessage);
+            return nextMesg();
+          }
+          bag.adapter.postPRComment(bag.userinput.owner, bag.userinput.repo,
+            bag.userinput.issueNumber, mesg.prComment,
+            function (err) {
+              if (err) {
+                console.log(chalk.bold.red(' ✗ ') + mesg.consoleMessage);
+                if (err === 403)
+                  return nextMesg('403: You have triggered an abuse detection' +
+                    'mechanism and have been temporarily blocked from content' +
+                    'creation. Please retry your request again later.');
+              }
+              else
+                console.log(chalk.bold.green(' ✓ ') + mesg.consoleMessage);
+              return nextMesg();
+            }
+          );
+        },
         function (err) {
-          return nextMesg(err);
+          if (file.skippedMessages)
+            logger.info(`Skipped ${file.skippedMessages} ` +
+              'messages as were out of scope of this PR');
+          return nextFile(err);
         }
       );
     },
