@@ -1,5 +1,5 @@
 {
-  "name": "Lint-Github-PR",
+  "name": "lint-github-pr",
   "version": "1.0.0",
   "description": "Lints any pull request on github using eslint config",
   "main": "dist/script.js",
