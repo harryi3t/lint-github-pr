@@ -2,6 +2,7 @@ import async from 'async';
 import chalk from 'chalk';
 import fs from 'fs';
 import prompt from 'prompt';
+import parseDiff from 'parse-diff';
 import {CLIEngine} from 'eslint';
 import GithubAdapter from 'github-adapter';
 import logger from './logger';
@@ -37,6 +38,7 @@ function init() {
     commitID: '',
     diffFiles: [],
     lintMessages: [],
+    lineNumberMap: {},
     tasks: [],
     token: null,
     userinput
@@ -52,6 +54,7 @@ function init() {
       initializeAdapter.bind(null, bag),
       getPRFiles.bind(null, bag),
       getCompleteFiles.bind(null, bag),
+      getPRDiff.bind(null, bag),
       lintEachFileInDiff.bind(null, bag),
       postComments.bind(null, bag)
     ],
@@ -238,6 +241,46 @@ function getCompleteFiles(bag, next) {
     }
   );
 }
+function getPRDiff(bag, next) {
+  const who = `${bag.who} | ${getPRDiff.name}`;
+  logger.debug(`>Inside ${who}`);
+
+  bag.adapter.getPRDiff(bag.userinput.owner, bag.userinput.repo,
+    bag.userinput.issueNumber,
+    (err, data) => {
+      if (err) {
+        if (err === 404)
+          return next(`404: ${bag.userinput.owner}/${bag.userinput.repo}/` +
+            `pull/${bag.userinput.issueNumber} does not exists`);
+        return next(err);
+      }
+
+      var parsedFiles = parseDiff(data);
+      parsedFiles.forEach(
+        function (file) {
+          var del = 0;
+          var relativeLine = 0;
+          bag.lineNumberMap[file.to] = {};
+          file.chunks.forEach(
+            function (chunk, index) {
+              if (index !== 0)
+                relativeLine++;
+              chunk.changes.forEach(
+                function (change) {
+                  relativeLine++;
+                  bag.lineNumberMap[file.to][change.ln || change.ln2] =
+                    relativeLine + del;
+                }
+              );
+            }
+          );
+        }
+      );
+
+      return next();
+    }
+  );
+}
 function lintEachFileInDiff(bag, next) {
   const who = `${bag.who} | ${lintEachFileInDiff.name}`;
   logger.debug(`>Inside ${who}`);
@@ -249,23 +292,41 @@ function lintEachFileInDiff(bag, next) {
 
   bag.diffFiles.forEach(
     function (file) {
-      logger.debug('\n', file.filename);
-
       var report = cli.executeOnText(file.raw, file.filename);
+
+      logger.debug(`\n${file.filename} (${report.results[0].messages.length})`);
+
       var messages = report.results[0].messages.map(
         function (obj) {
+          var line = 0;
+
+          if (!bag.lineNumberMap[file.filename][obj.line]) {
+            console.log(' ',
+              chalk.dim.yellow(chalk.dim(obj.ruleId) + ': ' + obj.line),
+              chalk.dim.red(obj.message), chalk.bold.blue('skipped')
+            );
+            return null;
+          }
+
+          line = bag.lineNumberMap[file.filename][obj.line];
+
           console.log(' ',
             chalk.yellow(chalk.bold(obj.ruleId) + ': ' + obj.line),
             chalk.red(obj.message)
           );
+
           return {
             body: `\`${obj.ruleId}\`: ${obj.message}`,
             commit_id: bag.commitID,
             path: file.filename,
-            position: obj.line
+            position: line
           };
         }
       );
+      var filteredMessages = messages.filter((m) => m);
+      logger.info(`Skipped ${messages.length - filteredMessages.length} ` +
+        `errors. Out of scope of current PR`);
+      messages = filteredMessages;
       bag.lintMessages = bag.lintMessages.concat(messages);
     }
   );
