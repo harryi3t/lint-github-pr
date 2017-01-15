@@ -13,7 +13,7 @@
   "dependencies": {
     "async": "^2.1.4",
     "chalk": "^1.1.3",
-    "eslint-plugin-callback-function": "^1.1.0",
+    "eslint-plugin-callback-function": "^1.3.0",
     "github-adapter": "file:///home/harry/work/projects/npm/github-adapter",
     "parse-diff": "^0.4.0",
     "prompt": "^1.0.0",

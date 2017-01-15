@@ -6,7 +6,7 @@ module.exports = {
     "callback-function"
   ],
   "globals": {
-    
+
   },
   "extends": "airbnb-base/legacy",
   "rules": {
@@ -36,6 +36,6 @@ module.exports = {
     "no-mixed-operators": 0,
 
     // custom rules
-    "callback-function/on-newline": ["error"]
+    //"callback-function/on-newline": ["error"]
   }
 };

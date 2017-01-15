@@ -1,10 +1,12 @@
 import async from 'async';
 import fs from 'fs';
 import prompt from 'prompt';
-import parseDiff from 'parse-diff';
+import {linter, CLIEngine} from 'eslint';
+//import parseDiff from 'parse-diff';
 import GithubAdapter from 'github-adapter';
 import logger from './logger';
 import icons from './icons';
+import lintConfig from '../lintConfig';
 
 const userinput = {
   owner: null,
@@ -21,6 +23,9 @@ function init() {
     adapter: null,
     body: '',
     configFilePresent: false,
+    commitID: '',
+    diffFiles: [],
+    lintMessages: [],
     tasks: [],
     token: null,
     userinput
@@ -34,10 +39,10 @@ function init() {
       createConfigFile.bind(null, bag),
       checkToken.bind(null, bag),
       initializeAdapter.bind(null, bag),
-      getPR.bind(null, bag),
-      parsePRDiff.bind(null, bag)
-      //postComments.bind(null, bag)
-
+      getPRFiles.bind(null, bag),
+      getCompleteFiles.bind(null, bag),
+      lintEachFileInDiff.bind(null, bag),
+      postComments.bind(null, bag)
     ],
     (err) => {
       if (err)
@@ -64,7 +69,6 @@ function parsePullRequestURL(bag, next) {
 
   return next();
 }
-
 function checkConfigFile(bag, next) {
   const who = `${bag.who} | ${checkConfigFile.name}`;
   logger.debug(`>Inside ${who}`);
@@ -80,7 +84,6 @@ function checkConfigFile(bag, next) {
     return next();
   });
 }
-
 function createConfigFile(bag, next) {
   let who = `${bag.who} | ${createConfigFile.name}`;
 
@@ -135,7 +138,6 @@ function validateToken(token, next) {
   else
     return next();
 }
-
 function checkToken(bag, next) {
   const who = `${bag.who} | ${checkToken.name}`;
   logger.debug(`>Inside ${who}`);
@@ -153,7 +155,6 @@ function checkToken(bag, next) {
     validateToken(bag.token, next);
   });
 }
-
 function initializeAdapter(bag, next) {
   const who = `${bag.who} | ${initializeAdapter.name}`;
   logger.debug(`>Inside ${who}`);
@@ -161,12 +162,11 @@ function initializeAdapter(bag, next) {
   bag.adapter = new GithubAdapter(bag.token);
   return next();
 }
-
-function getPR(bag, next) {
-  const who = `${bag.who} | ${getPR.name}`;
+function getPRFiles(bag, next) {
+  const who = `${bag.who} | ${getPRFiles.name}`;
   logger.debug(`>Inside ${who}`);
 
-  bag.adapter.getPRDiff(bag.userinput.owner, bag.userinput.repo,
+  bag.adapter.getPRFiles(bag.userinput.owner, bag.userinput.repo,
     bag.userinput.issueNumber,
     (err, data) => {
       if (err) {
@@ -175,57 +175,98 @@ function getPR(bag, next) {
             `pull/${bag.userinput.issueNumber} does not exists`);
         return next(err);
       }
+      bag.diffFiles = data.filter(
+        function (file) {
+          return file.filename.slice(-3) === '.js';
+        }
+      );
 
-      bag.body = data;
+      if (bag.diffFiles.length === 0) {
+        return next('No JS file in the PR');
+      }
+
+      var match = bag.diffFiles[0].raw_url.match(/raw\/([a-z0-9]{40})\//);
+      if (match && match.length === 2)
+        bag.commitID = match[1];
+
+      if (!bag.commitID)
+        return next('Could not get commitId');
+
+      var fileNames = bag.diffFiles.map(
+        function (file) {
+          return file.filename;
+        }
+      );
+      logger.info(`Total files found in PR: ${data.length}\n` +
+        ` Total JS files: ${bag.diffFiles.length} (${fileNames.join(', ')})`);
       return next();
     }
   );
 }
-
-function parsePRDiff(bag, next) {
-  const who = `${bag.who} | ${parsePRDiff.name}`;
+function getCompleteFiles(bag, next) {
+  const who = `${bag.who} | ${getCompleteFiles.name}`;
   logger.debug(`>Inside ${who}`);
 
-  let files = parseDiff(bag.body);
-  console.log(files);
-  files.forEach(
-    (file) => {
-      console.log(file.to,'------------------------------');
-      // file.chunks.forEach(
-      //   (chunk) => {
-      //     console.log('---------------');
-      //     console.log(chunk);
-      //   }
-      // );
+  async.each(bag.diffFiles,
+    function (file, nextFile) {
+      bag.adapter.getRawContent(file.raw_url,
+        function (err, data) {
+          if (err) return nextFile(err);
+
+          file.raw = data;
+          return nextFile();
+        }
+      );
+    },
+    function (err) {
+      return next(err);
     }
   );
+}
+function lintEachFileInDiff(bag, next) {
+  const who = `${bag.who} | ${lintEachFileInDiff.name}`;
+  logger.debug(`>Inside ${who}`);
+
+  var cli = new CLIEngine({
+    useEslintrc: false,
+    baseConfig: lintConfig
+  });
+
+  bag.diffFiles.forEach(
+    function (file) {
+      var report = cli.executeOnText(file.raw, file.filename);
+      var messages = report.results[0].messages.map(
+        function (obj) {
+          return {
+            body: `\`${obj.ruleId}\`: ${obj.message}`,
+            commit_id: bag.commitID,
+            path: file.filename,
+            position: obj.line
+          };
+        }
+      );
+      bag.lintMessages = bag.lintMessages.concat(messages);
+    }
+  );
+  console.log(bag.lintMessages);
 
   return next();
 }
-
 function postComments(bag, next) {
   const who = `${bag.who} | ${postComments.name}`;
   logger.debug(`>Inside ${who}`);
 
-  var lines = [27];
-
-  async.each(lines,
-    function (line, nextLine) {
-      bag.adapter.postPRComment('harryi3t','5136','2',
-        {
-          'body': 'comment on position '+line,
-          'commit_id': '0f4f64c184a68b8a6fc4d4ea8b4131c909ed217a',
-          'path': 'shippable.yml',
-          'position': line
-        },
-        function (err, comment) {
-          console.log('comment ', comment);
+  async.each(bag.lintMessages,
+    function (mesg, nextMesg) {
+      bag.adapter.postPRComment(bag.userinput.owner, bag.userinput.repo,
+        bag.userinput.issueNumber, mesg,
+        function (err) {
+          return nextMesg(err);
         }
       );
-      return nextLine();
     },
-    function () {
-      return next();
+    function (err) {
+      return next(err);
     }
   );
 }
