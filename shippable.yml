@@ -5,6 +5,5 @@ build:
     - $SHIPPABLE_BUILD_DIR/node_modules
 node_js:
   - "6"
-  - "6.1"
-  - "5.11"
-  - "iojs"
+  - "5"
+  - "4"

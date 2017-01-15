@@ -1,11 +1,24 @@
 module.exports = {
-    "extends": "airbnb-base",
-    "installedESLint": true,
-    "plugins": [
-        "import"
-    ],
-    "rules": {
-      "no-use-before-define": ["error", { "functions": false}],
-      "quote-props": 0
-    }
+  "env": {
+    "browser": true,
+    "es6": true
+  },
+  "extends": "eslint:recommended",
+  "parserOptions": {
+    "sourceType": "module"
+  },
+  "plugins": ["callback-function"],
+  "rules": {
+    "quotes": ["error","single"],
+    "semi": ["error","always"],
+    "no-console": "warn",
+    "comma-dangle": ["error", "never"],
+    "callback-function/on-newline": "error",
+    "indent": ["error", 2]
+  },
+  "globals": {
+    "module": true,
+    "process": true,
+    "require": true
+  }
 };

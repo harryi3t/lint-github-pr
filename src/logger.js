@@ -1,30 +1,30 @@
 import chalk from 'chalk';
 
 export default {
-  error: function (...args) {
+  error(...args) {
     console.log(chalk.bold.red(safeJSON(args)));
   },
-  warn: function (...args) {
+  warn(...args) {
     console.log(chalk.bold.yellow(safeJSON(args)));
   },
-  info: function (...args) {
+  info(...args) {
     console.log(chalk.bold.green(safeJSON(args)));
   },
-  debug: function (...args) {
+  debug(...args) {
     console.log(chalk.bold.blue(safeJSON(args)));
-  }
+  },
 };
 
 function safeJSON(args) {
-  var str = '';
+  let str = '';
   try {
     args.forEach(
-      function (arg) {
+      (arg) => {
         if (typeof arg === 'string')
-          str += ' ' + arg;
+          str += ` ${arg}`;
         else
-          str += '\n' + JSON.stringify(arg, null, 1);
-      }
+          str += `\n${JSON.stringify(arg, null, 1)}`;
+      },
     );
     return str;
   } catch (err) {

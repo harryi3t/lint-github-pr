@@ -1,14 +1,12 @@
-import _ from 'underscore';
 import async from 'async';
 import fs from 'fs';
-import GithubAdapter from './Adapter.js';
-import logger from './logger.js';
 import prompt from 'prompt';
-import {parse} from './parser';
+import parseDiff from 'parse-diff';
+import GithubAdapter from 'github-adapter';
+import logger from './logger';
 import icons from './icons';
 
-var githubUrl = 'https://github.com';
-var userinput = {
+const userinput = {
   owner: null,
   repo: null,
   issueNumber: 0,
@@ -18,88 +16,85 @@ var userinput = {
 init();
 
 function init() {
-  var bag = {
+  const bag = {
     who: 'script',
     adapter: null,
     body: '',
-    tasks: [],
     configFilePresent: false,
-    userinput: userinput
+    tasks: [],
+    token: null,
+    userinput
   };
+  Object.seal(bag);
   logger.info(`>Starting ${bag.who}`);
   async.series(
     [
-      _parsePMIssue.bind(null, bag),
-      _checkConfigFile.bind(null, bag),
-      _createConfigFile.bind(null, bag),
-      _checkToken.bind(null, bag),
-      _initializeAdapter.bind(null, bag),
-      _getIssue.bind(null, bag),
-      _parseBody.bind(null, bag),
-      _createIssues.bind(null, bag)
+      parsePullRequestURL.bind(null, bag),
+      checkConfigFile.bind(null, bag),
+      createConfigFile.bind(null, bag),
+      checkToken.bind(null, bag),
+      initializeAdapter.bind(null, bag),
+      getPR.bind(null, bag),
+      parsePRDiff.bind(null, bag)
+      //postComments.bind(null, bag)
+
     ],
-    function (err) {
+    (err) => {
       if (err)
         logger.error(icons.cross, 'Completed with error: ', err);
     }
   );
 }
 
-function _parsePMIssue(bag, next) {
-  var pmIssueUrl = process.argv[2];
-  var defaultRepo = process.argv[3];
-  var validNameRegexp = '[a-zA-Z0-9\-\._]+';
-  var urlRegex = new RegExp(`https?://github.com/(${validNameRegexp})/` +
-    `(${validNameRegexp})/issues/([0-9]+)`);
-  var urlMatch = pmIssueUrl.match(urlRegex);
+function parsePullRequestURL(bag, next) {
+  const pullRequestUrl = process.argv[2];
+  const validNameRegexp = '[a-zA-Z0-9-.]+';
+  const urlRegex = new RegExp(`https?://github.com/(${validNameRegexp})/` +
+    `(${validNameRegexp})/pull/([0-9]+)(/|/files)?$`);
 
-  if (!pmIssueUrl)
-    return next('Please pass the PM issue URL as the 1st argument');
-  if (!urlMatch)
-    return next(`Invalid URL`);
-  if (!defaultRepo)
-    return next('Please pass the default repo to open issues as 2nd argument');
-  if (!defaultRepo.match(new RegExp(`^${validNameRegexp}$`)))
-    return next('Invalid default repo. Found Invalid characters');
+  if (!pullRequestUrl)
+    return next('Please pass the PR URL as the 1st argument');
+
+  const urlMatch = pullRequestUrl.match(urlRegex);
+  if (!urlMatch) return next('Invalid URL');
 
   bag.userinput.owner = urlMatch[1];
   bag.userinput.repo = urlMatch[2];
   bag.userinput.issueNumber = urlMatch[3];
-  bag.userinput.defaultRepo = defaultRepo;
 
   return next();
 }
 
-function _checkConfigFile(bag, next) {
-  var who = `${bag.who} | ${_checkConfigFile.name}`;
+function checkConfigFile(bag, next) {
+  const who = `${bag.who} | ${checkConfigFile.name}`;
   logger.debug(`>Inside ${who}`);
 
-  var requiredPermissions = fs.constants.R_OK | fs.constants.W_OK
-    | fs.constants.W_OK;
+  // eslint-disable-next-line no-bitwise
+  const requiredPermissions = fs.constants.ROK | fs.constants.WOK
+    | fs.constants.WOK;
   fs.access('.config.json', requiredPermissions, (err) => {
     if (err)
       logger.warn('.config.json file not found');
-    else
-      bag.configFilePresent = true;
+    else bag.configFilePresent = true;
 
     return next();
   });
 }
 
-function _createConfigFile(bag, next) {
-  var who = `${bag.who} | ${_createConfigFile.name}`;
+function createConfigFile(bag, next) {
+  let who = `${bag.who} | ${createConfigFile.name}`;
 
   if (bag.configFilePresent) {
-    who += ' skipped'
+    who += ' skipped';
     logger.debug(`>Inside ${who}`);
     return next();
   }
   logger.debug(`>Inside ${who}`);
 
-  __getTokenFromInput((token) => {
+  getTokenFromInput((token) => {
     logger.debug('Saving token to file .config.json ...');
 
-    var fileToWrite = JSON.stringify({
+    const fileToWrite = JSON.stringify({
       githubToken: token
     }, null, 2);
 
@@ -113,113 +108,124 @@ function _createConfigFile(bag, next) {
     });
   });
 }
-function __getTokenFromInput(next) {
+function getTokenFromInput(next) {
   logger.info('Please enter your github token');
   prompt.start();
   prompt.get('github token', (err, result) => {
-    var token = result['github token'];
+    const token = result['github token'];
     if (err) return;
-    __validateToken(token, (err) => {
+    validateToken(token, (err) => {
       if (err) {
         logger.warn(err);
-        __getTokenFromInput(next);
+        getTokenFromInput(next);
       }
 
       return next(null, token);
-    })
+    });
   });
 }
-function __validateToken(token, next) {
+function validateToken(token, next) {
   if (!token || typeof token !== 'string')
-    return next(`Token not found`);
-  else if (token.length !== 40)
-    return next(`Invalid token. Must be of length 40, ` +
+    return next('Token not found');
+  else if (token.length !== 40) {
+    return next('Invalid token. Must be of length 40, ' +
       `but found length ${token.length}`);
-  else if (!token.match(/[a-z0-9]{40}/))
-    return next(`Invalid characters found in the token`);
+  } else if (!token.match(/[a-z0-9]{40}/))
+    return next('Invalid characters found in the token');
   else
     return next();
 }
 
-function _checkToken(bag, next) {
-  var who = `${bag.who} | ${_checkToken.name}`;
+function checkToken(bag, next) {
+  const who = `${bag.who} | ${checkToken.name}`;
   logger.debug(`>Inside ${who}`);
 
   fs.readFile('.config.json', 'utf8', (err, strData) => {
     if (err) return next(err);
 
+    let jsonData = null;
     try {
-      var jsonData = JSON.parse(strData);
-      bag.token = jsonData.githubToken;
+      jsonData = JSON.parse(strData);
     } catch (err) {
       return next('the content of .config.json file in not a valid JSON');
     }
-
-    __validateToken(bag.token, next);
+    bag.token = jsonData.githubToken;
+    validateToken(bag.token, next);
   });
 }
 
-function _initializeAdapter(bag, next) {
-  var who = `${bag.who} | ${_initializeAdapter.name}`;
+function initializeAdapter(bag, next) {
+  const who = `${bag.who} | ${initializeAdapter.name}`;
   logger.debug(`>Inside ${who}`);
 
   bag.adapter = new GithubAdapter(bag.token);
   return next();
 }
 
-function _getIssue(bag, next) {
-  var who = `${bag.who} | ${_getIssue.name}`;
+function getPR(bag, next) {
+  const who = `${bag.who} | ${getPR.name}`;
   logger.debug(`>Inside ${who}`);
 
-  bag.adapter.getIssue(bag.userinput.owner, bag.userinput.repo,
+  bag.adapter.getPRDiff(bag.userinput.owner, bag.userinput.repo,
     bag.userinput.issueNumber,
-    function (err, data) {
-      if (err) return next(err);
+    (err, data) => {
+      if (err) {
+        if (err === 404)
+          return next(`404: ${bag.userinput.owner}/${bag.userinput.repo}/` +
+            `pull/${bag.userinput.issueNumber} does not exists`);
+        return next(err);
+      }
 
-      console.log(data.body);
-      bag.body = data.body;
+      bag.body = data;
       return next();
     }
   );
 }
 
-function _parseBody(bag, next) {
-  var who = `${bag.who} | ${_parseBody.name}`;
+function parsePRDiff(bag, next) {
+  const who = `${bag.who} | ${parsePRDiff.name}`;
   logger.debug(`>Inside ${who}`);
-  bag.tasks = parse(bag.body, bag.userinput);
-  console.log(`\n${bag.tasks.length} task(s) parsed`);
-  bag.tasks.forEach((task) => task.print());
+
+  let files = parseDiff(bag.body);
+  console.log(files);
+  files.forEach(
+    (file) => {
+      console.log(file.to,'------------------------------');
+      // file.chunks.forEach(
+      //   (chunk) => {
+      //     console.log('---------------');
+      //     console.log(chunk);
+      //   }
+      // );
+    }
+  );
+
   return next();
 }
 
-function _createIssues(bag, next) {
-  var who = `${bag.who} | ${_createIssues.name}`;
+function postComments(bag, next) {
+  const who = `${bag.who} | ${postComments.name}`;
   logger.debug(`>Inside ${who}`);
-  var error = '';
 
-  async.each(bag.tasks,
-    function (task, nextTask,) {
-      var delay = bag.tasks.indexOf(task) * 50;
-      // to open issues in series, without using async.series
-      // this is much faster than using async.series
-      setTimeout(() => {
-        bag.adapter.postIssue(task.owner, task.repo, task.getIssue(),
-          function (err, obj) {
-            if (!err)
-              logger.info(icons.check, task.title);
-            else {
-              logger.error(icons.cross, task.title);
-              logger.error('  ', `Repo not found ${task.owner}/${task.repo}`);
-              error = `Some repo(s) not found`;
-            }
+  var lines = [27];
 
-            return nextTask();
-          }
-        );
-      },delay);
+  async.each(lines,
+    function (line, nextLine) {
+      bag.adapter.postPRComment('harryi3t','5136','2',
+        {
+          'body': 'comment on position '+line,
+          'commit_id': '0f4f64c184a68b8a6fc4d4ea8b4131c909ed217a',
+          'path': 'shippable.yml',
+          'position': line
+        },
+        function (err, comment) {
+          console.log('comment ', comment);
+        }
+      );
+      return nextLine();
     },
-    function (err) {
-      return next(error);
+    function () {
+      return next();
     }
   );
 }
