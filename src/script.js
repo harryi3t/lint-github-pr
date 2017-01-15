@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import async from 'async';
 import chalk from 'chalk';
 import fs from 'fs';
@@ -6,7 +8,6 @@ import parseDiff from 'parse-diff';
 import {CLIEngine} from 'eslint';
 import GithubAdapter from 'github-adapter';
 import logger from './logger';
-import icons from './icons';
 import lintConfig from '../lintConfig';
 
 const userinput = {
@@ -59,7 +60,7 @@ function init() {
     ],
     (err) => {
       if (err)
-        logger.error(icons.cross, 'Completed with error: ', err);
+        logger.error('✗ Completed with error: ', err);
     }
   );
 }

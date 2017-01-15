@@ -1006,9 +1006,9 @@ eslint-module-utils@^2.0.0:
     debug "2.2.0"
     pkg-dir "^1.0.0"
 
-eslint-plugin-callback-function@^1.3.0:
-  version "1.3.0"
-  resolved "https://registry.yarnpkg.com/eslint-plugin-callback-function/-/eslint-plugin-callback-function-1.3.0.tgz#da3317b6f7bb6cdaf71eb0fd430d8de72a335436"
+eslint-plugin-callback-function@^1.3.2:
+  version "1.3.2"
+  resolved "https://registry.yarnpkg.com/eslint-plugin-callback-function/-/eslint-plugin-callback-function-1.3.2.tgz#a7a3ddd3e04250b1274165330412b9fa93ff7fd4"
   dependencies:
     requireindex "1.1.0"
 

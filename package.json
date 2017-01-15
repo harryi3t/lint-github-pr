@@ -1,19 +1,22 @@
 {
-  "name": "github_io",
+  "name": "Lint-Github-PR",
   "version": "1.0.0",
-  "description": "",
+  "description": "Lints any pull request on github using eslint config",
   "main": "dist/script.js",
   "scripts": {
     "test": "npm run build && mocha dist/test",
     "build": "babel src --out-dir dist",
     "start": "node dist/script.js"
   },
+  "bin": {
+    "lint-pr": "dist/script.js"
+  },
   "author": "Harendra Singh <66hari@gmail.com> (https://harryi3t.github.io)",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "async": "^2.1.4",
     "chalk": "^1.1.3",
-    "eslint-plugin-callback-function": "^1.3.0",
+    "eslint-plugin-callback-function": "^1.3.2",
     "github-adapter": "^0.1.0",
     "parse-diff": "^0.4.0",
     "prompt": "^1.0.0",
@@ -35,7 +38,6 @@
     "grunt-babel": "^6.0.0",
     "grunt-contrib-clean": "^1.0.0",
     "grunt-contrib-watch": "^1.0.0",
-    "load-grunt-tasks": "^3.5.2",
-    "mocha": "^3.2.0"
+    "load-grunt-tasks": "^3.5.2"
   }
 }
